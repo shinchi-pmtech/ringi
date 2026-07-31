@@ -1,7 +1,10 @@
 // domain/application/application.go
 package application
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ApplicationID は申請の識別子。
 // ただの string だが、型を分けることで他のIDとの取り違えをコンパイルエラーにできる
@@ -11,8 +14,8 @@ type ApplicantID string
 type ApproverID string
 
 var (
-	ErrNotSubmitted = errors.New("申請中の申請のみ承認できます")
-	ErrSelfApproval = errors.New("自分の申請を自分で承認することはできません")
+	ErrSelfApproval      = errors.New("自分の申請を自分で承認・差戻しすることはできません")
+	ErrInvalidTransition = errors.New("この状態からその操作はできません")
 )
 
 type Application struct {
@@ -34,23 +37,39 @@ func NewApplication(id ApplicationID, applicantID ApplicantID, title string) *Ap
 
 // Submit は申請を提出する(下書き → 申請中)
 func (a *Application) Submit() error {
-	if a.status != StatusDraft {
-		return errors.New("下書きの申請のみ提出できます")
-	}
-	a.status = StatusSubmitted
-	return nil
+	return a.transitionTo(StatusSubmitted)
 }
 
-// Approve は申請を承認する。
+// Approve は申請を承認する(申請中 → 承認済み)。
 // 「承認者は申請者と同一人物であってはならない」というビジネスルールはここに書く
 func (a *Application) Approve(approverID ApproverID) error {
-	if a.status != StatusSubmitted {
-		return ErrNotSubmitted
-	}
 	if string(approverID) == string(a.applicantID) {
 		return ErrSelfApproval
 	}
-	a.status = StatusApproved
+	return a.transitionTo(StatusApproved)
+}
+
+// Reject は申請を差戻す(申請中 → 差戻し)
+func (a *Application) Reject(approverID ApproverID) error {
+	if string(approverID) == string(a.applicantID) {
+		return ErrSelfApproval
+	}
+	return a.transitionTo(StatusRejected)
+}
+
+// Resubmit は差戻された申請を再提出する(差戻し → 申請中)。
+// 実装は Submit と同じ遷移先だが、業務上は別のふるまいなので別メソッドにする
+func (a *Application) Resubmit() error {
+	return a.transitionTo(StatusSubmitted)
+}
+
+// transitionTo は遷移ルールを検証してから状態を変更する。
+// 状態変更の入口をここ1箇所に絞る
+func (a *Application) transitionTo(next Status) error {
+	if !a.status.CanTransitionTo(next) {
+		return fmt.Errorf("%w: %s → %s", ErrInvalidTransition, a.status, next)
+	}
+	a.status = next
 	return nil
 }
 
