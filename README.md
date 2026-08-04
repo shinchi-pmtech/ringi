@@ -13,7 +13,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | --- | --- | --- |
 | 第1回 | [GoでDDDを始めたら最初にぶつかった「クラスがない」問題と、パッケージ構成という答え](https://qiita.com/shinchi-pmtech/items/f6748431b93969f5b526) | [article-01](https://github.com/shinchi-pmtech/ringi/tree/article-01) |
 | 第2回 | [差戻しされた申請は再提出できるのか。Goの値オブジェクトで状態遷移を型に落とす](https://qiita.com/shinchi-pmtech/items/66e0ee47136eb3a9d720) | [article-02](https://github.com/shinchi-pmtech/ringi/tree/article-02) |
-| 第3回 | インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか(公開後にリンク) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
+| 第3回 | [インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか。Goのリポジトリパターンで確かめる依存性逆転](https://qiita.com/shinchi-pmtech/items/d8937ab75348fbf63904) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
 
 ## 動かし方
 
