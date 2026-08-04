@@ -73,5 +73,19 @@ func (a *Application) transitionTo(next Status) error {
 	return nil
 }
 
-func (a *Application) ID() ApplicationID { return a.id }
-func (a *Application) Status() Status    { return a.status }
+// Reconstruct は永続化された値から Application を復元する。
+// 新規作成(NewApplication)と違い、状態を「下書き」に固定しない。
+// リポジトリ実装(infrastructure層)からの利用を想定している
+func Reconstruct(id ApplicationID, applicantID ApplicantID, title string, status Status) *Application {
+	return &Application{
+		id:          id,
+		applicantID: applicantID,
+		title:       title,
+		status:      status,
+	}
+}
+
+func (a *Application) ID() ApplicationID        { return a.id }
+func (a *Application) ApplicantID() ApplicantID { return a.applicantID }
+func (a *Application) Title() string            { return a.title }
+func (a *Application) Status() Status           { return a.status }

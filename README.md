@@ -13,6 +13,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | --- | --- | --- |
 | 第1回 | [GoでDDDを始めたら最初にぶつかった「クラスがない」問題と、パッケージ構成という答え](https://qiita.com/shinchi-pmtech/items/f6748431b93969f5b526) | [article-01](https://github.com/shinchi-pmtech/ringi/tree/article-01) |
 | 第2回 | [差戻しされた申請は再提出できるのか。Goの値オブジェクトで状態遷移を型に落とす](https://qiita.com/shinchi-pmtech/items/66e0ee47136eb3a9d720) | [article-02](https://github.com/shinchi-pmtech/ringi/tree/article-02) |
+| 第3回 | インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか(公開後にリンク) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
 
 ## 動かし方
 
@@ -22,17 +23,16 @@ cd ringi
 go run .
 ```
 
-「提出 → 差戻し → 再提出 → 承認」という一連の流れと、許可されない操作(自己承認、差戻し中の承認など)がエラーになる様子が動きます。
+「提出 → 差戻し → 再提出 → 承認」という一連の流れに加えて、SQLiteファイルからの復元と、DBに直接仕込まれた不正データが復元時に弾かれる様子が動きます。実行するとカレントディレクトリに `ringi.db`(SQLiteのデータファイル)が作られます。
 
 ```
 提出: submitted
 自己承認: 自分の申請を自分で承認・差戻しすることはできません
 差戻し: rejected
-差戻し中の承認: この状態からその操作はできません: rejected → approved
 再提出: submitted
 承認: approved
-承認後の再提出: この状態からその操作はできません: approved → submitted
-復元: 不正な状態です: "banana"
+復元: approved
+不正データ: 復元に失敗しました: 不正な状態です: "banana"
 ```
 
 テストも用意しています。
@@ -51,7 +51,7 @@ go test ./...
 │   └── application          # 「申請」集約(エンティティ・値オブジェクト・リポジトリのinterface)
 ├── usecase                  # 「申請する」「承認する」などのユースケース
 ├── infrastructure
-│   └── persistence          # リポジトリの実装(インメモリ)
+│   └── persistence          # リポジトリの実装(SQLite / インメモリ)
 └── presentation
     └── handler              # HTTPハンドラ
 ```
@@ -64,13 +64,14 @@ go test ./...
 - **interface は使う側(domain)に定義する**。Go の慣習に従うことで、依存性逆転が自然に実現します
 - **フィールドは非公開**。状態変更の唯一の手段をメソッドに限定し、不変条件をコンパイラに守らせます
 - **状態遷移のルールは遷移表に集約する**。「どの状態からどこへ動けるか」は `status.go` の遷移表 1 箇所にあり、テストは表の写しで書けます
+- **生成と復元は別物**。DBから読み戻した値は `NewStatus` の検証を通してから `Reconstruct` で組み立てます。不正なデータはドメインに入る前に弾かれます
 
 ## 予定
 
 連載の進行に合わせて育てていきます。
 
 - [x] 値オブジェクト編(`Status` の状態遷移を型で守る)
-- [ ] リポジトリ実装編(インメモリ → RDB)
+- [x] リポジトリ実装編(インメモリ → SQLite)
 - [ ] 集約設計編(多段承認・承認ルート)
 
 ## ライセンス
