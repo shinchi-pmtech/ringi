@@ -14,6 +14,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | 第1回 | [GoでDDDを始めたら最初にぶつかった「クラスがない」問題と、パッケージ構成という答え](https://qiita.com/shinchi-pmtech/items/f6748431b93969f5b526) | [article-01](https://github.com/shinchi-pmtech/ringi/tree/article-01) |
 | 第2回 | [差戻しされた申請は再提出できるのか。Goの値オブジェクトで状態遷移を型に落とす](https://qiita.com/shinchi-pmtech/items/66e0ee47136eb3a9d720) | [article-02](https://github.com/shinchi-pmtech/ringi/tree/article-02) |
 | 第3回 | [インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか。Goのリポジトリパターンで確かめる依存性逆転](https://qiita.com/shinchi-pmtech/items/d8937ab75348fbf63904) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
+| 第4回 | [承認ルートは申請の中に置くべきか、外に出すべきか。Goで多段承認を作りながら集約の境界を引く](https://qiita.com/shinchi-pmtech/items/59a665b68909ca55b87c) | [article-04](https://github.com/shinchi-pmtech/ringi/tree/article-04) |
 
 ## 動かし方
 
@@ -23,17 +24,18 @@ cd ringi
 go run .
 ```
 
-「提出 → 差戻し → 再提出 → 承認」という一連の流れに加えて、SQLiteファイルからの復元と、DBに直接仕込まれた不正データが復元時に弾かれる様子が動きます。実行するとカレントディレクトリに `ringi.db`(SQLiteのデータファイル)が作られます。
+「課長 → 部長」の2段承認で、提出から差戻し・再提出を経て全段承認に至る流れが動きます。実行するとカレントディレクトリに `ringi.db`(SQLiteのデータファイル)が作られます。
 
 ```
-提出: submitted
-自己承認: 自分の申請を自分で承認・差戻しすることはできません
-差戻し: rejected
-再提出: submitted
-承認: approved
-復元: approved
-不正データ: 復元に失敗しました: 不正な状態です: "banana"
+提出           submitted  [○kacho] → ○bucho
+部長が先に承認: 現在の承認者ではありません: 1段目の承認者は kacho です
+課長が承認     submitted  ●kacho → [○bucho]
+部長が差戻し   rejected   ○kacho → ○bucho
+再提出         submitted  [○kacho] → ○bucho
+全段承認       approved   ●kacho → ●bucho
 ```
+
+`●` は承認済み、`○` は未承認、`[ ]` は次に承認する段です。1段目を承認しても状態は `submitted` のままで、全段が承認されて初めて `approved` になります。
 
 テストも用意しています。
 
@@ -48,7 +50,7 @@ go test ./...
 ```
 .
 ├── domain
-│   └── application          # 「申請」集約(エンティティ・値オブジェクト・リポジトリのinterface)
+│   └── application          # 「申請」集約(エンティティ・値オブジェクト・承認ステップ・リポジトリのinterface)
 ├── usecase                  # 「申請する」「承認する」などのユースケース
 ├── infrastructure
 │   └── persistence          # リポジトリの実装(SQLite / インメモリ)
@@ -60,11 +62,12 @@ go test ./...
 
 ## 設計のポイント
 
-- **ビジネスルールは domain のメソッドに置く**。「承認者は申請者と同一人物であってはならない」は `Application.Approve()` の中にあります
+- **ビジネスルールは domain に置く**。「承認者は申請者と同一人物であってはならない」は承認ルートの検証で、「順番を飛ばせない」は `Application.Approve()` で守られます
 - **interface は使う側(domain)に定義する**。Go の慣習に従うことで、依存性逆転が自然に実現します
 - **フィールドは非公開**。状態変更の唯一の手段をメソッドに限定し、不変条件をコンパイラに守らせます
 - **状態遷移のルールは遷移表に集約する**。「どの状態からどこへ動けるか」は `status.go` の遷移表 1 箇所にあり、テストは表の写しで書けます
 - **生成と復元は別物**。DBから読み戻した値は `NewStatus` の検証を通してから `Reconstruct` で組み立てます。不正なデータはドメインに入る前に弾かれます
+- **集約は丸ごと扱う**。承認ステップは申請集約の一部なので、専用のリポジトリを持たず、申請と同じトランザクションで保存されます。外へはスライスの複製を返し、書き換えを防ぎます
 
 ## 予定
 
@@ -72,7 +75,8 @@ go test ./...
 
 - [x] 値オブジェクト編(`Status` の状態遷移を型で守る)
 - [x] リポジトリ実装編(インメモリ → SQLite)
-- [ ] 集約設計編(多段承認・承認ルート)
+- [x] 集約設計編(多段承認・承認ルート)
+- [ ] ドメインサービス編(承認ルートの決定ロジックをどこに置くか)
 
 ## ライセンス
 
