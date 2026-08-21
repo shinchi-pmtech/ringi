@@ -10,37 +10,43 @@ import (
 	"github.com/shinchi-pmtech/ringi/usecase"
 )
 
-// インメモリ実装をテストダブルとして使う。DBなしでユースケースを検証できる
-func TestApproveApplication_自己承認は拒否される(t *testing.T) {
-	repo := persistence.NewApplicationMemoryRepository()
-	app := application.NewApplication("APP-001", "tanaka", "開発端末の購入")
+func newSubmittedApp(t *testing.T, repo application.Repository) {
+	t.Helper()
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+		application.ApprovalRoute{"kacho", "bucho"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := app.Submit(); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Save(app); err != nil {
 		t.Fatal(err)
-	}
-
-	u := usecase.NewApproveApplication(repo)
-	err := u.Execute("APP-001", "tanaka")
-
-	if !errors.Is(err, application.ErrSelfApproval) {
-		t.Errorf("自己承認が拒否されませんでした: %v", err)
 	}
 }
 
-func TestApproveApplication_別人なら承認できる(t *testing.T) {
+// インメモリ実装をテストダブルとして使う。DBなしでユースケースを検証できる
+func TestApproveApplication_順番どおりでない承認は拒否される(t *testing.T) {
 	repo := persistence.NewApplicationMemoryRepository()
-	app := application.NewApplication("APP-001", "tanaka", "開発端末の購入")
-	if err := app.Submit(); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.Save(app); err != nil {
-		t.Fatal(err)
-	}
+	newSubmittedApp(t, repo)
 
 	u := usecase.NewApproveApplication(repo)
-	if err := u.Execute("APP-001", "suzuki"); err != nil {
+	err := u.Execute("APP-001", "bucho") // 1段目は kacho
+
+	if !errors.Is(err, application.ErrNotYourTurn) {
+		t.Errorf("順番を飛ばした承認が拒否されませんでした: %v", err)
+	}
+}
+
+func TestApproveApplication_全段の承認で承認済みになる(t *testing.T) {
+	repo := persistence.NewApplicationMemoryRepository()
+	newSubmittedApp(t, repo)
+
+	u := usecase.NewApproveApplication(repo)
+	if err := u.Execute("APP-001", "kacho"); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Execute("APP-001", "bucho"); err != nil {
 		t.Fatal(err)
 	}
 

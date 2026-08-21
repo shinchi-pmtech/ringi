@@ -28,8 +28,15 @@ func newTestRepo(t *testing.T) (*ApplicationSQLiteRepository, *sql.DB) {
 func TestApplicationSQLiteRepository_SaveAndFindByID(t *testing.T) {
 	repo, _ := newTestRepo(t)
 
-	app := application.NewApplication("APP-001", "tanaka", "開発端末の購入")
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+		application.ApprovalRoute{"kacho", "bucho"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := app.Submit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Approve("kacho"); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Save(app); err != nil {
@@ -44,13 +51,26 @@ func TestApplicationSQLiteRepository_SaveAndFindByID(t *testing.T) {
 		got.Title() != app.Title() || got.Status() != app.Status() {
 		t.Errorf("復元結果が一致しません: got %+v, want %+v", got, app)
 	}
+
+	// 承認ステップも集約の一部として復元される
+	steps := got.Steps()
+	if len(steps) != 2 {
+		t.Fatalf("ステップ数が %d です", len(steps))
+	}
+	if !steps[0].Approved() || steps[1].Approved() {
+		t.Error("承認の進捗が復元されていません")
+	}
 }
 
 // DBに直接仕込まれた不正な状態は、復元時に NewStatus が弾く
 func TestApplicationSQLiteRepository_FindByID_InvalidStatus(t *testing.T) {
 	repo, db := newTestRepo(t)
 
-	app := application.NewApplication("APP-001", "tanaka", "開発端末の購入")
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+		application.ApprovalRoute{"kacho"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.Save(app); err != nil {
 		t.Fatal(err)
 	}
