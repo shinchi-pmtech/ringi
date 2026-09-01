@@ -28,7 +28,11 @@ func newTestRepo(t *testing.T) (*ApplicationSQLiteRepository, *sql.DB) {
 func TestApplicationSQLiteRepository_SaveAndFindByID(t *testing.T) {
 	repo, _ := newTestRepo(t)
 
-	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, err := application.NewMoney(150000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		application.ApprovalRoute{"kacho", "bucho"})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +70,11 @@ func TestApplicationSQLiteRepository_SaveAndFindByID(t *testing.T) {
 func TestApplicationSQLiteRepository_FindByID_InvalidStatus(t *testing.T) {
 	repo, db := newTestRepo(t)
 
-	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, err := application.NewMoney(50000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		application.ApprovalRoute{"kacho"})
 	if err != nil {
 		t.Fatal(err)

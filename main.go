@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/shinchi-pmtech/ringi/infrastructure/organization"
 	"github.com/shinchi-pmtech/ringi/infrastructure/persistence"
 	"github.com/shinchi-pmtech/ringi/presentation/handler"
 	"github.com/shinchi-pmtech/ringi/usecase"
@@ -25,23 +26,27 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	resolver := organization.NewMemoryApproverResolver()
 
+	create := usecase.NewCreateApplication(repo, resolver)
 	approve := usecase.NewApproveApplication(repo)
-	reject := usecase.NewRejectApplication(repo)
-	resubmit := usecase.NewResubmitApplication(repo)
 	_ = handler.NewApplicationHandler(approve)
 	// ... HTTPサーバーの起動(記事では省略)
 
-	// デモを繰り返し実行できるよう、前回のデータを消しておく
-	for _, table := range []string{"approval_steps", "applications"} {
-		if _, err := db.Exec("DELETE FROM " + table); err != nil {
-			log.Fatal(err)
-		}
+	// 金額によって承認ルートが変わる
+	if err := create.Execute("APP-001", "tanaka", "マウス購入", 5000); err != nil {
+		log.Fatal(err)
 	}
+	printRoute(repo, "APP-001", "マウス購入")
 
-	// 「課長 → 部長」の2段承認で申請を作る
-	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
-		application.ApprovalRoute{"kacho", "bucho"})
+	if err := create.Execute("APP-002", "tanaka", "開発端末の購入", 150000); err != nil {
+		log.Fatal(err)
+	}
+	printRoute(repo, "APP-002", "開発端末の購入")
+
+	// 10万円未満の申請は、課長の承認だけで承認済みになる
+	fmt.Println()
+	app, err := repo.FindByID("APP-001")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,75 +56,40 @@ func main() {
 	if err := repo.Save(app); err != nil {
 		log.Fatal(err)
 	}
-	printProgress(repo, "提出")
-
-	// 順番を飛ばした承認は拒否される
-	if err := approve.Execute("APP-001", "bucho"); err != nil {
-		fmt.Println("部長が先に承認:", err)
-	}
-
-	// 1段目を承認しても、申請そのものはまだ「申請中」
 	if err := approve.Execute("APP-001", "kacho"); err != nil {
 		log.Fatal(err)
 	}
-	printProgress(repo, "課長が承認")
+	printRoute(repo, "APP-001", "マウス購入")
 
-	// 差戻すと、再提出時に進捗はリセットされる
-	if err := reject.Execute("APP-001", "bucho"); err != nil {
-		log.Fatal(err)
-	}
-	printProgress(repo, "部長が差戻し")
-
-	if err := resubmit.Execute("APP-001"); err != nil {
-		log.Fatal(err)
-	}
-	printProgress(repo, "再提出")
-
-	// 今度は最後まで承認する
-	if err := approve.Execute("APP-001", "kacho"); err != nil {
-		log.Fatal(err)
-	}
-	if err := approve.Execute("APP-001", "bucho"); err != nil {
-		log.Fatal(err)
-	}
-	printProgress(repo, "全段承認")
+	// 組織図に情報がない申請者はルートを決められない
+	err = create.Execute("APP-003", "unknown", "備品購入", 3000)
+	fmt.Println("\n組織図にない申請者:", err)
 }
 
-// printProgress は申請をDBから読み直して、状態と承認の進捗を1行で表示する。
-//
-//	● 承認済み / ○ 未承認 / [ ] 次に承認する段
-func printProgress(repo *persistence.ApplicationSQLiteRepository, label string) {
-	app, err := repo.FindByID("APP-001")
+// printRoute は申請をDBから読み直して、金額・状態・承認ルートを表示する
+func printRoute(repo *persistence.ApplicationSQLiteRepository, id, label string) {
+	app, err := repo.FindByID(application.ApplicationID(id))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	steps := app.Steps()
 	route := ""
-	for i, s := range steps {
+	for i, s := range app.Steps() {
 		if i > 0 {
 			route += " → "
 		}
-
 		mark := "○"
 		if s.Approved() {
 			mark = "●"
 		}
-		cell := fmt.Sprintf("%s%s", mark, s.ApproverID())
-
-		// 申請中のときだけ、次に承認する段を [ ] で囲む
-		isNext := !s.Approved() && (i == 0 || steps[i-1].Approved())
-		if isNext && app.Status() == application.StatusSubmitted {
-			cell = "[" + cell + "]"
-		}
-		route += cell
+		route += mark + string(s.ApproverID())
 	}
 
-	fmt.Printf("%s %s %s\n", pad(label, 14), pad(string(app.Status()), 10), route)
+	fmt.Printf("%s %s %s %s\n",
+		pad(label, 18), pad(comma(app.Amount().Yen())+"円", 12), pad(string(app.Status()), 10), route)
 }
 
-// pad は全角文字を2桁として数えて右側を空白で埋める。
-// Printf の %-12s は全角を1桁と数えるため、日本語ラベルでは桁が揃わない
+// pad は全角文字を2桁として数えて右側を空白で埋める
 func pad(s string, width int) string {
 	w := 0
 	for _, r := range s {
@@ -133,4 +103,17 @@ func pad(s string, width int) string {
 		s += " "
 	}
 	return s
+}
+
+// comma は数値を3桁区切りの文字列にする
+func comma(n int) string {
+	s := fmt.Sprintf("%d", n)
+	out := ""
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out += ","
+		}
+		out += string(r)
+	}
+	return out
 }

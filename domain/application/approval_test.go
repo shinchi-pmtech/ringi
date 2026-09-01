@@ -8,7 +8,11 @@ import (
 
 func newSubmitted(t *testing.T) *Application {
 	t.Helper()
-	app, err := NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, err := NewMoney(150000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		ApprovalRoute{"kacho", "bucho"})
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +114,8 @@ func TestResubmit_1段目からやり直しになる(t *testing.T) {
 
 // 申請者自身を承認ルートに含めることはできない
 func TestNewApplication_申請者は承認ルートに入れない(t *testing.T) {
-	_, err := NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, _ := NewMoney(150000)
+	_, err := NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		ApprovalRoute{"kacho", "tanaka"})
 	if !errors.Is(err, ErrSelfApproval) {
 		t.Errorf("申請者を含むルートが通ってしまいました: %v", err)
@@ -119,7 +124,8 @@ func TestNewApplication_申請者は承認ルートに入れない(t *testing.T)
 
 // 同じ承認者が複数回登場するルートは作れない
 func TestNewApplication_重複した承認者は入れない(t *testing.T) {
-	_, err := NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, _ := NewMoney(150000)
+	_, err := NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		ApprovalRoute{"kacho", "kacho"})
 	if !errors.Is(err, ErrDuplicateRoute) {
 		t.Errorf("重複したルートが通ってしまいました: %v", err)

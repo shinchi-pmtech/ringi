@@ -12,7 +12,11 @@ import (
 
 func newSubmittedApp(t *testing.T, repo application.Repository) {
 	t.Helper()
-	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入",
+	amount, err := application.NewMoney(150000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := application.NewApplication("APP-001", "tanaka", "開発端末の購入", amount,
 		application.ApprovalRoute{"kacho", "bucho"})
 	if err != nil {
 		t.Fatal(err)

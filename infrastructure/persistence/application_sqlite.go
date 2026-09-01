@@ -13,17 +13,23 @@ type ApplicationSQLiteRepository struct {
 	db *sql.DB
 }
 
-// NewApplicationSQLiteRepository はリポジトリを生成し、テーブルがなければ作る。
-// (本格的なマイグレーション管理は本連載では扱わない)
+// NewApplicationSQLiteRepository はリポジトリを生成し、テーブルを作り直す。
+//
+// 既存のテーブルを削除してから作るのは、連載でスキーマが変わっても
+// 古い ringi.db が残っている環境でそのまま動かせるようにするため。
+// 本来スキーマの変更はマイグレーションの領分だが、本連載では扱わない。
 func NewApplicationSQLiteRepository(db *sql.DB) (*ApplicationSQLiteRepository, error) {
 	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS applications (
+		DROP TABLE IF EXISTS applications;
+		DROP TABLE IF EXISTS approval_steps;
+		CREATE TABLE applications (
 			id           TEXT PRIMARY KEY,
 			applicant_id TEXT NOT NULL,
 			title        TEXT NOT NULL,
+			amount       INTEGER NOT NULL,
 			status       TEXT NOT NULL
 		);
-		CREATE TABLE IF NOT EXISTS approval_steps (
+		CREATE TABLE approval_steps (
 			application_id TEXT    NOT NULL,
 			step_order     INTEGER NOT NULL,
 			approver_id    TEXT    NOT NULL,
@@ -46,13 +52,14 @@ func (r *ApplicationSQLiteRepository) Save(app *application.Application) error {
 	defer tx.Rollback() // Commit 済みなら何も起きない
 
 	if _, err := tx.Exec(`
-		INSERT INTO applications (id, applicant_id, title, status)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO applications (id, applicant_id, title, amount, status)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			applicant_id = excluded.applicant_id,
 			title        = excluded.title,
+			amount       = excluded.amount,
 			status       = excluded.status`,
-		string(app.ID()), string(app.ApplicantID()), app.Title(), string(app.Status()),
+		string(app.ID()), string(app.ApplicantID()), app.Title(), app.Amount().Yen(), string(app.Status()),
 	); err != nil {
 		return err
 	}
@@ -80,20 +87,25 @@ func (r *ApplicationSQLiteRepository) Save(app *application.Application) error {
 // FindByID は申請と承認ステップをまとめて読み出し、集約として組み立て直す
 func (r *ApplicationSQLiteRepository) FindByID(id application.ApplicationID) (*application.Application, error) {
 	row := r.db.QueryRow(
-		`SELECT applicant_id, title, status FROM applications WHERE id = ?`,
+		`SELECT applicant_id, title, amount, status FROM applications WHERE id = ?`,
 		string(id),
 	)
 
 	var applicantID, title, statusRaw string
-	if err := row.Scan(&applicantID, &title, &statusRaw); err != nil {
+	var yen int
+	if err := row.Scan(&applicantID, &title, &yen, &statusRaw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("application not found")
 		}
 		return nil, err
 	}
 
-	// DBから来た文字列は「外の世界」の値。NewStatus の自己検証を必ず通す
+	// DBから来た値は「外の世界」の値。値オブジェクトの自己検証を必ず通す
 	status, err := application.NewStatus(statusRaw)
+	if err != nil {
+		return nil, fmt.Errorf("復元に失敗しました: %w", err)
+	}
+	amount, err := application.NewMoney(yen)
 	if err != nil {
 		return nil, fmt.Errorf("復元に失敗しました: %w", err)
 	}
@@ -107,6 +119,7 @@ func (r *ApplicationSQLiteRepository) FindByID(id application.ApplicationID) (*a
 		id,
 		application.ApplicantID(applicantID),
 		title,
+		amount,
 		status,
 		steps,
 	), nil

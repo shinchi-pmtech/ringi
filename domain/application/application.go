@@ -22,13 +22,14 @@ type Application struct {
 	id          ApplicationID
 	applicantID ApplicantID
 	title       string
+	amount      Money
 	status      Status
 	steps       []ApprovalStep // 承認の進捗。集約の内側でのみ変更される
 }
 
 // NewApplication は「下書き」状態の申請を生成する。
 // 承認ルートは申請時点の内容を写し取る(以後、組織のマスタが変わっても影響を受けない)
-func NewApplication(id ApplicationID, applicantID ApplicantID, title string, route ApprovalRoute) (*Application, error) {
+func NewApplication(id ApplicationID, applicantID ApplicantID, title string, amount Money, route ApprovalRoute) (*Application, error) {
 	if err := route.validate(applicantID); err != nil {
 		return nil, err
 	}
@@ -46,6 +47,7 @@ func NewApplication(id ApplicationID, applicantID ApplicantID, title string, rou
 		id:          id,
 		applicantID: applicantID,
 		title:       title,
+		amount:      amount,
 		status:      StatusDraft,
 		steps:       steps,
 	}, nil
@@ -139,11 +141,12 @@ func (a *Application) transitionTo(next Status) error {
 // Reconstruct は永続化された値から Application を復元する。
 // 新規作成(NewApplication)と違い、状態や進捗をそのまま組み立てる。
 // リポジトリ実装(infrastructure層)からの利用を想定している
-func Reconstruct(id ApplicationID, applicantID ApplicantID, title string, status Status, steps []ApprovalStep) *Application {
+func Reconstruct(id ApplicationID, applicantID ApplicantID, title string, amount Money, status Status, steps []ApprovalStep) *Application {
 	return &Application{
 		id:          id,
 		applicantID: applicantID,
 		title:       title,
+		amount:      amount,
 		status:      status,
 		steps:       steps,
 	}
@@ -152,6 +155,7 @@ func Reconstruct(id ApplicationID, applicantID ApplicantID, title string, status
 func (a *Application) ID() ApplicationID        { return a.id }
 func (a *Application) ApplicantID() ApplicantID { return a.applicantID }
 func (a *Application) Title() string            { return a.title }
+func (a *Application) Amount() Money            { return a.amount }
 func (a *Application) Status() Status           { return a.status }
 
 // Steps は承認の進捗を読み取り専用で返す。
