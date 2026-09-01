@@ -15,6 +15,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | 第2回 | [差戻しされた申請は再提出できるのか。Goの値オブジェクトで状態遷移を型に落とす](https://qiita.com/shinchi-pmtech/items/66e0ee47136eb3a9d720) | [article-02](https://github.com/shinchi-pmtech/ringi/tree/article-02) |
 | 第3回 | [インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか。Goのリポジトリパターンで確かめる依存性逆転](https://qiita.com/shinchi-pmtech/items/d8937ab75348fbf63904) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
 | 第4回 | [承認ルートは申請の中に置くべきか、外に出すべきか。Goで多段承認を作りながら集約の境界を引く](https://qiita.com/shinchi-pmtech/items/59a665b68909ca55b87c) | [article-04](https://github.com/shinchi-pmtech/ringi/tree/article-04) |
+| 第5回 | 「10万円以上は部長承認」をどこに書くか。Goのドメインサービスと、使いすぎない線引き(公開後にリンク) | [article-05](https://github.com/shinchi-pmtech/ringi/tree/article-05) |
 
 ## 動かし方
 
@@ -24,18 +25,18 @@ cd ringi
 go run .
 ```
 
-「課長 → 部長」の2段承認で、提出から差戻し・再提出を経て全段承認に至る流れが動きます。実行するとカレントディレクトリに `ringi.db`(SQLiteのデータファイル)が作られます。
+申請金額によって承認ルートが変わる様子が動きます。実行するとカレントディレクトリに `ringi.db`(SQLiteのデータファイル)が作られます。
 
 ```
-提出           submitted  [○kacho] → ○bucho
-部長が先に承認: 現在の承認者ではありません: 1段目の承認者は kacho です
-課長が承認     submitted  ●kacho → [○bucho]
-部長が差戻し   rejected   ○kacho → ○bucho
-再提出         submitted  [○kacho] → ○bucho
-全段承認       approved   ●kacho → ●bucho
+マウス購入         5,000円      draft      ○kacho
+開発端末の購入     150,000円    draft      ○kacho → ○bucho
+
+マウス購入         5,000円      approved   ●kacho
+
+組織図にない申請者: 承認者が見つかりません: 申請者 unknown の組織情報がありません
 ```
 
-`●` は承認済み、`○` は未承認、`[ ]` は次に承認する段です。1段目を承認しても状態は `submitted` のままで、全段が承認されて初めて `approved` になります。
+`●` は承認済み、`○` は未承認です。10万円未満は課長のみ、10万円以上は課長と部長の2段承認になります。
 
 テストも用意しています。
 
@@ -50,9 +51,10 @@ go test ./...
 ```
 .
 ├── domain
-│   └── application          # 「申請」集約(エンティティ・値オブジェクト・承認ステップ・リポジトリのinterface)
+│   └── application          # 「申請」集約(エンティティ・値オブジェクト・承認ステップ・ドメインサービス・interface)
 ├── usecase                  # 「申請する」「承認する」などのユースケース
 ├── infrastructure
+│   ├── organization         # 組織図の参照(ApproverResolver の実装)
 │   └── persistence          # リポジトリの実装(SQLite / インメモリ)
 └── presentation
     └── handler              # HTTPハンドラ
@@ -68,15 +70,13 @@ go test ./...
 - **状態遷移のルールは遷移表に集約する**。「どの状態からどこへ動けるか」は `status.go` の遷移表 1 箇所にあり、テストは表の写しで書けます
 - **生成と復元は別物**。DBから読み戻した値は `NewStatus` の検証を通してから `Reconstruct` で組み立てます。不正なデータはドメインに入る前に弾かれます
 - **集約は丸ごと扱う**。承認ステップは申請集約の一部なので、専用のリポジトリを持たず、申請と同じトランザクションで保存されます。外へはスライスの複製を返し、書き換えを防ぎます
+- **どのモデルにも属さないルールはドメインサービスへ**。「10万円以上は部長承認」の判定は金額・組織のルール・組織図をまたぐため、`DecideApprovalRoute` として独立させています。状態を持たないので関数です
 
-## 予定
+## 連載の状況
 
-連載の進行に合わせて育てていきます。
+全5回で、エンティティ・値オブジェクト・リポジトリ・集約・ドメインサービスという戦術的DDDの主要な部品が一通り揃いました。連載としては一区切りです。
 
-- [x] 値オブジェクト編(`Status` の状態遷移を型で守る)
-- [x] リポジトリ実装編(インメモリ → SQLite)
-- [x] 集約設計編(多段承認・承認ルート)
-- [ ] ドメインサービス編(承認ルートの決定ロジックをどこに置くか)
+次はここで整理したユビキタス言語をAIに渡す話(オントロジー、MCP)を新しい連載として始める予定で、そのコードもこのリポジトリに追加していきます。
 
 ## ライセンス
 
