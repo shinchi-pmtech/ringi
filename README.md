@@ -15,7 +15,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | 第2回 | [差戻しされた申請は再提出できるのか。Goの値オブジェクトで状態遷移を型に落とす](https://qiita.com/shinchi-pmtech/items/66e0ee47136eb3a9d720) | [article-02](https://github.com/shinchi-pmtech/ringi/tree/article-02) |
 | 第3回 | [インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか。Goのリポジトリパターンで確かめる依存性逆転](https://qiita.com/shinchi-pmtech/items/d8937ab75348fbf63904) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
 | 第4回 | [承認ルートは申請の中に置くべきか、外に出すべきか。Goで多段承認を作りながら集約の境界を引く](https://qiita.com/shinchi-pmtech/items/59a665b68909ca55b87c) | [article-04](https://github.com/shinchi-pmtech/ringi/tree/article-04) |
-| 第5回 | 「10万円以上は部長承認」をどこに書くか。Goのドメインサービスと、使いすぎない線引き(公開後にリンク) | [article-05](https://github.com/shinchi-pmtech/ringi/tree/article-05) |
+| 第5回 | [「10万円以上は部長承認」をどこに書くか。Goのドメインサービスと、使いすぎない線引き](https://qiita.com/shinchi-pmtech/items/9046380853c316b68bf7) | [article-05](https://github.com/shinchi-pmtech/ringi/tree/article-05) |
 
 ## 動かし方
 
