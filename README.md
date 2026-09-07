@@ -9,6 +9,8 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 
 記事執筆時点のコードは、回ごとのタグで参照できます。main は常に最新回の状態です。
 
+### 連載1: GoでDDD
+
 | 回 | 記事 | コード |
 | --- | --- | --- |
 | 第1回 | [GoでDDDを始めたら最初にぶつかった「クラスがない」問題と、パッケージ構成という答え](https://qiita.com/shinchi-pmtech/items/f6748431b93969f5b526) | [article-01](https://github.com/shinchi-pmtech/ringi/tree/article-01) |
@@ -16,6 +18,14 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | 第3回 | [インメモリをSQLiteに差し替えても、usecaseは無傷でいられるのか。Goのリポジトリパターンで確かめる依存性逆転](https://qiita.com/shinchi-pmtech/items/d8937ab75348fbf63904) | [article-03](https://github.com/shinchi-pmtech/ringi/tree/article-03) |
 | 第4回 | [承認ルートは申請の中に置くべきか、外に出すべきか。Goで多段承認を作りながら集約の境界を引く](https://qiita.com/shinchi-pmtech/items/59a665b68909ca55b87c) | [article-04](https://github.com/shinchi-pmtech/ringi/tree/article-04) |
 | 第5回 | [「10万円以上は部長承認」をどこに書くか。Goのドメインサービスと、使いすぎない線引き](https://qiita.com/shinchi-pmtech/items/9046380853c316b68bf7) | [article-05](https://github.com/shinchi-pmtech/ringi/tree/article-05) |
+
+### 連載2: ユビキタス言語をAIに渡す
+
+連載1で整理した語彙を、AIに渡せるかを試す連載です。実験コードは [`ontology/`](./ontology) 以下にあります。
+
+| 回 | 記事 | コード |
+| --- | --- | --- |
+| 第1回 | [差戻された申請は、もう一度出せますか？　AIの答えは「出せない」](https://qiita.com/shinchi-pmtech/items/fea33ad995978944a432) | [ai-01](https://github.com/shinchi-pmtech/ringi/tree/ai-01) |
 
 ## 動かし方
 
@@ -56,8 +66,10 @@ go test ./...
 ├── infrastructure
 │   ├── organization         # 組織図の参照(ApproverResolver の実装)
 │   └── persistence          # リポジトリの実装(SQLite / インメモリ)
-└── presentation
-    └── handler              # HTTPハンドラ
+├── presentation
+│   └── handler              # HTTPハンドラ
+└── ontology
+    └── experiment           # 連載2の実験コード(AIに語彙を渡す試み)
 ```
 
 依存の向きはすべて `domain` に向かいます。`domain` は標準ライブラリ以外の何にも依存しません。
@@ -74,9 +86,9 @@ go test ./...
 
 ## 連載の状況
 
-全5回で、エンティティ・値オブジェクト・リポジトリ・集約・ドメインサービスという戦術的DDDの主要な部品が一通り揃いました。連載としては一区切りです。
+連載1は全5回で、エンティティ・値オブジェクト・リポジトリ・集約・ドメインサービスという戦術的DDDの主要な部品が一通り揃い、一区切りとしました。
 
-次はここで整理したユビキタス言語をAIに渡す話(オントロジー、MCP)を新しい連載として始める予定で、そのコードもこのリポジトリに追加していきます。
+連載2では、そこで整理したユビキタス言語をAIに渡す話(オントロジー、MCP)を扱っています。コードは引き続きこのリポジトリに追加していきます。
 
 ## ライセンス
 
