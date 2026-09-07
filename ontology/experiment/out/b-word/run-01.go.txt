@@ -1,0 +1,86 @@
+```go
+package main
+
+import "errors"
+
+type Status int
+
+const (
+	StatusDraft Status = iota
+	StatusPending
+	StatusApproved
+	StatusRejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case StatusDraft:
+		return "下書き"
+	case StatusPending:
+		return "申請中"
+	case StatusApproved:
+		return "承認済み"
+	case StatusRejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type Application struct {
+	ID          int
+	ApplicantID int
+	Status      Status
+	Content     string
+}
+
+var (
+	ErrInvalidTransition    = errors.New("不正な状態遷移です")
+	ErrSameApplicantApprover = errors.New("承認者は申請者と同一人物であってはなりません")
+)
+
+func Submit(app *Application, applicantID int) error {
+	if app.ApplicantID != applicantID {
+		return errors.New("申請者のみが提出できます")
+	}
+	if app.Status != StatusDraft {
+		return ErrInvalidTransition
+	}
+	app.Status = StatusPending
+	return nil
+}
+
+func Approve(app *Application, approverID int) error {
+	if app.Status != StatusPending {
+		return ErrInvalidTransition
+	}
+	if app.ApplicantID == approverID {
+		return ErrSameApplicantApprover
+	}
+	app.Status = StatusApproved
+	return nil
+}
+
+func Reject(app *Application, approverID int) error {
+	if app.Status != StatusPending {
+		return ErrInvalidTransition
+	}
+	if app.ApplicantID == approverID {
+		return ErrSameApplicantApprover
+	}
+	app.Status = StatusRejected
+	return nil
+}
+
+func Resubmit(app *Application, applicantID int, newContent string) error {
+	if app.ApplicantID != applicantID {
+		return errors.New("申請者のみが再提出できます")
+	}
+	if app.Status != StatusRejected {
+		return ErrInvalidTransition
+	}
+	app.Content = newContent
+	app.Status = StatusPending
+	return nil
+}
+```

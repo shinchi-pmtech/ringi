@@ -1,0 +1,133 @@
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Status int
+
+const (
+	Draft Status = iota
+	Pending
+	Approved
+	Rejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case Draft:
+		return "下書き"
+	case Pending:
+		return "申請中"
+	case Approved:
+		return "承認済み"
+	case Rejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type Application struct {
+	ID          int
+	ApplicantID string
+	Status      Status
+	Content     string
+}
+
+var (
+	ErrInvalidTransition  = errors.New("不正な状態遷移です")
+	ErrSameApprover       = errors.New("承認者は申請者と同一人物であってはなりません")
+	ErrNotApplicant       = errors.New("申請者のみが操作できます")
+)
+
+func Submit(app *Application, applicantID string) error {
+	if app.ApplicantID != applicantID {
+		return ErrNotApplicant
+	}
+	if app.Status != Draft {
+		return fmt.Errorf("%w: %s -> 申請中", ErrInvalidTransition, app.Status)
+	}
+	app.Status = Pending
+	return nil
+}
+
+func Approve(app *Application, approverID string) error {
+	if app.ApplicantID == approverID {
+		return ErrSameApprover
+	}
+	if app.Status != Pending {
+		return fmt.Errorf("%w: %s -> 承認済み", ErrInvalidTransition, app.Status)
+	}
+	app.Status = Approved
+	return nil
+}
+
+func Reject(app *Application, approverID string) error {
+	if app.ApplicantID == approverID {
+		return ErrSameApprover
+	}
+	if app.Status != Pending {
+		return fmt.Errorf("%w: %s -> 差戻し", ErrInvalidTransition, app.Status)
+	}
+	app.Status = Rejected
+	return nil
+}
+
+func Resubmit(app *Application, applicantID string, newContent string) error {
+	if app.ApplicantID != applicantID {
+		return ErrNotApplicant
+	}
+	if app.Status != Rejected {
+		return fmt.Errorf("%w: %s -> 申請中", ErrInvalidTransition, app.Status)
+	}
+	app.Content = newContent
+	app.Status = Pending
+	return nil
+}
+
+func main() {
+	app := &Application{
+		ID:          1,
+		ApplicantID: "user1",
+		Status:      Draft,
+		Content:     "申請内容",
+	}
+
+	fmt.Printf("初期状態: %s\n", app.Status)
+
+	if err := Submit(app, "user1"); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("提出後: %s\n", app.Status)
+	}
+
+	if err := Approve(app, "user1"); err != nil {
+		fmt.Printf("エラー (同一人物): %v\n", err)
+	}
+
+	if err := Reject(app, "user2"); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("差戻し後: %s\n", app.Status)
+	}
+
+	if err := Resubmit(app, "user1", "修正した申請内容"); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("再提出後: %s, 内容: %s\n", app.Status, app.Content)
+	}
+
+	if err := Approve(app, "user2"); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("承認後: %s\n", app.Status)
+	}
+
+	if err := Submit(app, "user1"); err != nil {
+		fmt.Printf("エラー (不正な遷移): %v\n", err)
+	}
+}
+```

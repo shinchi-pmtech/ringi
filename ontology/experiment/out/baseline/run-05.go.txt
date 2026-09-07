@@ -1,0 +1,76 @@
+```go
+package main
+
+import "errors"
+
+type Status int
+
+const (
+	Draft Status = iota
+	Pending
+	Approved
+	Rejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case Draft:
+		return "下書き"
+	case Pending:
+		return "申請中"
+	case Approved:
+		return "承認済み"
+	case Rejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type Application struct {
+	ID          string
+	ApplicantID string
+	Status      Status
+}
+
+func NewApplication(id, applicantID string) *Application {
+	return &Application{
+		ID:          id,
+		ApplicantID: applicantID,
+		Status:      Draft,
+	}
+}
+
+func (a *Application) Submit(applicantID string) error {
+	if a.ApplicantID != applicantID {
+		return errors.New("申請者本人のみ申請を提出できます")
+	}
+	if a.Status != Draft {
+		return errors.New("下書き状態の申請のみ提出できます")
+	}
+	a.Status = Pending
+	return nil
+}
+
+func (a *Application) Approve(approverID string) error {
+	if a.ApplicantID == approverID {
+		return errors.New("承認者は申請者と同一人物であってはなりません")
+	}
+	if a.Status != Pending {
+		return errors.New("申請中の申請のみ承認できます")
+	}
+	a.Status = Approved
+	return nil
+}
+
+func (a *Application) Reject(approverID string) error {
+	if a.ApplicantID == approverID {
+		return errors.New("差戻し者は申請者と同一人物であってはなりません")
+	}
+	if a.Status != Pending {
+		return errors.New("申請中の申請のみ差戻しできます")
+	}
+	a.Status = Rejected
+	return nil
+}
+```

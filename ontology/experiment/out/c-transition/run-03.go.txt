@@ -1,0 +1,147 @@
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Status int
+
+const (
+	StatusDraft Status = iota
+	StatusPending
+	StatusApproved
+	StatusRejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case StatusDraft:
+		return "下書き"
+	case StatusPending:
+		return "申請中"
+	case StatusApproved:
+		return "承認済み"
+	case StatusRejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type User struct {
+	ID   string
+	Name string
+}
+
+type Application struct {
+	ID          string
+	Status      Status
+	Applicant   User
+	Approver    *User
+}
+
+var (
+	ErrInvalidTransition    = errors.New("不正な状態遷移です")
+	ErrSameApplicantApprover = errors.New("承認者は申請者と同一人物であってはなりません")
+	ErrApproverRequired     = errors.New("承認者が必要です")
+)
+
+func Submit(app *Application, applicant User) error {
+	if app.Status != StatusDraft {
+		return fmt.Errorf("%w: %s から %s への遷移はできません", ErrInvalidTransition, app.Status, StatusPending)
+	}
+
+	app.Status = StatusPending
+	app.Applicant = applicant
+	return nil
+}
+
+func Approve(app *Application, approver User) error {
+	if app.Status != StatusPending {
+		return fmt.Errorf("%w: %s から %s への遷移はできません", ErrInvalidTransition, app.Status, StatusApproved)
+	}
+
+	if app.Applicant.ID == approver.ID {
+		return ErrSameApplicantApprover
+	}
+
+	app.Status = StatusApproved
+	app.Approver = &approver
+	return nil
+}
+
+func Reject(app *Application, approver User) error {
+	if app.Status != StatusPending {
+		return fmt.Errorf("%w: %s から %s への遷移はできません", ErrInvalidTransition, app.Status, StatusRejected)
+	}
+
+	if app.Applicant.ID == approver.ID {
+		return ErrSameApplicantApprover
+	}
+
+	app.Status = StatusRejected
+	app.Approver = &approver
+	return nil
+}
+
+func Resubmit(app *Application, applicant User) error {
+	if app.Status != StatusRejected {
+		return fmt.Errorf("%w: %s から %s への遷移はできません", ErrInvalidTransition, app.Status, StatusPending)
+	}
+
+	if app.Applicant.ID != applicant.ID {
+		return errors.New("再申請は元の申請者のみが行えます")
+	}
+
+	app.Status = StatusPending
+	app.Approver = nil
+	return nil
+}
+
+func main() {
+	applicant := User{ID: "user1", Name: "申請者A"}
+	approver := User{ID: "user2", Name: "承認者B"}
+
+	app := &Application{
+		ID:        "app1",
+		Status:    StatusDraft,
+		Applicant: applicant,
+	}
+
+	fmt.Printf("初期状態: %s\n", app.Status)
+
+	if err := Submit(app, applicant); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("提出後: %s\n", app.Status)
+	}
+
+	if err := Reject(app, approver); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("差戻し後: %s\n", app.Status)
+	}
+
+	if err := Resubmit(app, applicant); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("再申請後: %s\n", app.Status)
+	}
+
+	if err := Approve(app, applicant); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	}
+
+	if err := Approve(app, approver); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	} else {
+		fmt.Printf("承認後: %s\n", app.Status)
+	}
+
+	if err := Approve(app, approver); err != nil {
+		fmt.Printf("エラー: %v\n", err)
+	}
+}
+```

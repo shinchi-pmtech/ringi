@@ -1,0 +1,121 @@
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Status int
+
+const (
+	Draft Status = iota
+	Pending
+	Approved
+	Rejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case Draft:
+		return "下書き"
+	case Pending:
+		return "申請中"
+	case Approved:
+		return "承認済み"
+	case Rejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type Application struct {
+	ID          int
+	Status      Status
+	ApplicantID int
+}
+
+var (
+	ErrInvalidTransition  = errors.New("不正な状態遷移です")
+	ErrSamePersonApproval = errors.New("承認者は申請者と同一人物であってはなりません")
+)
+
+func Submit(app *Application, applicantID int) error {
+	if app.Status != Draft {
+		return fmt.Errorf("%w: %s から 申請中 への遷移はできません", ErrInvalidTransition, app.Status)
+	}
+	app.Status = Pending
+	app.ApplicantID = applicantID
+	return nil
+}
+
+func Approve(app *Application, approverID int) error {
+	if app.Status != Pending {
+		return fmt.Errorf("%w: %s から 承認済み への遷移はできません", ErrInvalidTransition, app.Status)
+	}
+	if app.ApplicantID == approverID {
+		return ErrSamePersonApproval
+	}
+	app.Status = Approved
+	return nil
+}
+
+func Reject(app *Application, approverID int) error {
+	if app.Status != Pending {
+		return fmt.Errorf("%w: %s から 差戻し への遷移はできません", ErrInvalidTransition, app.Status)
+	}
+	if app.ApplicantID == approverID {
+		return ErrSamePersonApproval
+	}
+	app.Status = Rejected
+	return nil
+}
+
+func main() {
+	app := &Application{
+		ID:     1,
+		Status: Draft,
+	}
+
+	applicantID := 1
+	approverID := 2
+
+	fmt.Printf("初期状態: %s\n", app.Status)
+
+	if err := Submit(app, applicantID); err != nil {
+		fmt.Printf("提出エラー: %v\n", err)
+	} else {
+		fmt.Printf("提出後: %s\n", app.Status)
+	}
+
+	if err := Approve(app, applicantID); err != nil {
+		fmt.Printf("承認エラー: %v\n", err)
+	}
+
+	if err := Approve(app, approverID); err != nil {
+		fmt.Printf("承認エラー: %v\n", err)
+	} else {
+		fmt.Printf("承認後: %s\n", app.Status)
+	}
+
+	app2 := &Application{
+		ID:     2,
+		Status: Draft,
+	}
+
+	if err := Submit(app2, applicantID); err != nil {
+		fmt.Printf("提出エラー: %v\n", err)
+	}
+
+	if err := Reject(app2, approverID); err != nil {
+		fmt.Printf("差戻しエラー: %v\n", err)
+	} else {
+		fmt.Printf("差戻し後: %s\n", app2.Status)
+	}
+
+	if err := Approve(app2, approverID); err != nil {
+		fmt.Printf("不正遷移エラー: %v\n", err)
+	}
+}
+```

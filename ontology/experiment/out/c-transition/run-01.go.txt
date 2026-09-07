@@ -1,0 +1,79 @@
+```go
+package main
+
+import "errors"
+
+type Status int
+
+const (
+	Draft Status = iota
+	InReview
+	Approved
+	Rejected
+)
+
+func (s Status) String() string {
+	switch s {
+	case Draft:
+		return "下書き"
+	case InReview:
+		return "申請中"
+	case Approved:
+		return "承認済み"
+	case Rejected:
+		return "差戻し"
+	default:
+		return "不明"
+	}
+}
+
+type Application struct {
+	ID          int
+	ApplicantID int
+	Status      Status
+}
+
+func Submit(app *Application, applicantID int) error {
+	if app.ApplicantID != applicantID {
+		return errors.New("申請者のみが提出できます")
+	}
+	if app.Status != Draft {
+		return errors.New("下書きの申請のみ提出できます")
+	}
+	app.Status = InReview
+	return nil
+}
+
+func Approve(app *Application, approverID int) error {
+	if app.ApplicantID == approverID {
+		return errors.New("承認者は申請者と同一人物であってはなりません")
+	}
+	if app.Status != InReview {
+		return errors.New("申請中の申請のみ承認できます")
+	}
+	app.Status = Approved
+	return nil
+}
+
+func Reject(app *Application, approverID int) error {
+	if app.ApplicantID == approverID {
+		return errors.New("差戻し者は申請者と同一人物であってはなりません")
+	}
+	if app.Status != InReview {
+		return errors.New("申請中の申請のみ差戻しできます")
+	}
+	app.Status = Rejected
+	return nil
+}
+
+func Resubmit(app *Application, applicantID int) error {
+	if app.ApplicantID != applicantID {
+		return errors.New("申請者のみが再提出できます")
+	}
+	if app.Status != Rejected {
+		return errors.New("差戻しの申請のみ再提出できます")
+	}
+	app.Status = InReview
+	return nil
+}
+```
