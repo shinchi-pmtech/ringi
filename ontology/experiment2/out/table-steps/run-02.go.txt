@@ -1,0 +1,181 @@
+```go
+// domain/application/application.go
+package application
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ApproverID は承認者を識別するID
+type ApproverID string
+
+// ApprovalStep は承認ルートの一段を表す
+type ApprovalStep struct {
+	ApproverID ApproverID
+	ApprovedAt *time.Time
+}
+
+// IsApproved はこの段が承認済みかを返す
+func (s *ApprovalStep) IsApproved() bool {
+	return s.ApprovedAt != nil
+}
+
+// ApprovalRoute は承認ルート（承認者の並び）を表す
+type ApprovalRoute []*ApprovalStep
+
+// CurrentStepIndex は現在承認待ちの段のインデックスを返す。
+// すべて承認済みの場合は -1 を返す
+func (r ApprovalRoute) CurrentStepIndex() int {
+	for i, step := range r {
+		if !step.IsApproved() {
+			return i
+		}
+	}
+	return -1
+}
+
+// IsCompleted はすべての段が承認済みかを返す
+func (r ApprovalRoute) IsCompleted() bool {
+	return r.CurrentStepIndex() == -1
+}
+
+// ApplicationID は申請を識別するID
+type ApplicationID string
+
+// Application は申請を表す集約ルート
+type Application struct {
+	id            ApplicationID
+	status        Status
+	approvalRoute ApprovalRoute
+	createdAt     time.Time
+	updatedAt     time.Time
+}
+
+// NewApplication は新しい申請を生成する（下書き状態）
+func NewApplication(id ApplicationID, approvers []ApproverID) (*Application, error) {
+	if len(approvers) == 0 {
+		return nil, errors.New("承認ルートには少なくとも1人の承認者が必要です")
+	}
+
+	route := make(ApprovalRoute, len(approvers))
+	for i, approverID := range approvers {
+		if approverID == "" {
+			return nil, fmt.Errorf("承認者ID(%d番目)が空です", i+1)
+		}
+		route[i] = &ApprovalStep{ApproverID: approverID}
+	}
+
+	now := time.Now()
+	return &Application{
+		id:            id,
+		status:        StatusDraft,
+		approvalRoute: route,
+		createdAt:     now,
+		updatedAt:     now,
+	}, nil
+}
+
+// Restore はDBなどの永続化層から申請を復元する
+func Restore(
+	id ApplicationID,
+	status string,
+	approvalRoute ApprovalRoute,
+	createdAt time.Time,
+	updatedAt time.Time,
+) (*Application, error) {
+	s, err := NewStatus(status)
+	if err != nil {
+		return nil, err
+	}
+	if len(approvalRoute) == 0 {
+		return nil, errors.New("承認ルートには少なくとも1人の承認者が必要です")
+	}
+	return &Application{
+		id:            id,
+		status:        s,
+		approvalRoute: approvalRoute,
+		createdAt:     createdAt,
+		updatedAt:     updatedAt,
+	}, nil
+}
+
+// ID は申請IDを返す
+func (a *Application) ID() ApplicationID { return a.id }
+
+// Status は現在の状態を返す
+func (a *Application) Status() Status { return a.status }
+
+// ApprovalRoute は承認ルートを返す
+func (a *Application) ApprovalRoute() ApprovalRoute { return a.approvalRoute }
+
+// CreatedAt は作成日時を返す
+func (a *Application) CreatedAt() time.Time { return a.createdAt }
+
+// UpdatedAt は最終更新日時を返す
+func (a *Application) UpdatedAt() time.Time { return a.updatedAt }
+
+// Submit は申請を提出する（下書き → 申請中、差戻し → 申請中）
+func (a *Application) Submit() error {
+	if !a.status.CanTransitionTo(StatusSubmitted) {
+		return fmt.Errorf("提出できません: 現在の状態は %q です", a.status)
+	}
+	a.status = StatusSubmitted
+	a.updatedAt = time.Now()
+	return nil
+}
+
+// Approve は指定した承認者として現在の承認待ち段を承認する。
+// 順番を飛ばすことはできない。
+// すべての段が承認されたとき、申請を承認済みに遷移させる。
+func (a *Application) Approve(approverID ApproverID) error {
+	if a.status != StatusSubmitted {
+		return fmt.Errorf("承認できません: 現在の状態は %q です", a.status)
+	}
+
+	idx := a.approvalRoute.CurrentStepIndex()
+	if idx == -1 {
+		// 理論上ここには来ないが防御的に
+		return errors.New("承認できません: すべての承認段がすでに完了しています")
+	}
+
+	currentStep := a.approvalRoute[idx]
+	if currentStep.ApproverID != approverID {
+		return fmt.Errorf(
+			"承認できません: 現在の承認者は %q です（指定: %q）",
+			currentStep.ApproverID, approverID,
+		)
+	}
+
+	now := time.Now()
+	currentStep.ApprovedAt = &now
+	a.updatedAt = now
+
+	// すべての段が承認済みになったら申請を承認済みに遷移させる
+	if a.approvalRoute.IsCompleted() {
+		if !a.status.CanTransitionTo(StatusApproved) {
+			return fmt.Errorf("承認済みへの遷移に失敗しました: 現在の状態は %q です", a.status)
+		}
+		a.status = StatusApproved
+	}
+
+	return nil
+}
+
+// Reject は申請を差し戻す（申請中 → 差戻し）
+func (a *Application) Reject() error {
+	if !a.status.CanTransitionTo(StatusRejected) {
+		return fmt.Errorf("差し戻しできません: 現在の状態は %q です", a.status)
+	}
+
+	// 差し戻し時はすべての承認段をリセットする
+	for _, step := range a.approvalRoute {
+		step.ApprovedAt = nil
+	}
+
+	a.status = StatusRejected
+	a.updatedAt = time.Now()
+	return nil
+}
+```

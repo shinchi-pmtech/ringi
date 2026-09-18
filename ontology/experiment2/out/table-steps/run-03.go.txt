@@ -1,0 +1,179 @@
+```go
+// domain/application/application.go
+package application
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ApproverID は承認者を識別する型
+type ApproverID string
+
+// ApprovalStep は承認ルートの1段を表す
+type ApprovalStep struct {
+	ApproverID ApproverID
+	ApprovedAt *time.Time
+}
+
+// IsApproved はこの段が承認済みかを返す
+func (s *ApprovalStep) IsApproved() bool {
+	return s.ApprovedAt != nil
+}
+
+// ApprovalRoute は承認ルート(承認ステップの並び)を表す
+type ApprovalRoute []*ApprovalStep
+
+// NewApprovalRoute は承認者IDの並びから承認ルートを生成する
+func NewApprovalRoute(approverIDs []ApproverID) (ApprovalRoute, error) {
+	if len(approverIDs) == 0 {
+		return nil, errors.New("承認ルートには少なくとも1名の承認者が必要です")
+	}
+	route := make(ApprovalRoute, len(approverIDs))
+	for i, id := range approverIDs {
+		if id == "" {
+			return nil, fmt.Errorf("承認者ID(%d番目)が空です", i+1)
+		}
+		route[i] = &ApprovalStep{ApproverID: id}
+	}
+	return route, nil
+}
+
+// currentStepIndex は次に承認すべきステップのインデックスを返す。
+// すべて承認済みの場合は -1 を返す
+func (r ApprovalRoute) currentStepIndex() int {
+	for i, step := range r {
+		if !step.IsApproved() {
+			return i
+		}
+	}
+	return -1
+}
+
+// IsFullyApproved はすべてのステップが承認済みかを返す
+func (r ApprovalRoute) IsFullyApproved() bool {
+	return r.currentStepIndex() == -1
+}
+
+// ApplicationID は申請を識別する型
+type ApplicationID string
+
+// Application は申請を表すエンティティ
+type Application struct {
+	id            ApplicationID
+	status        Status
+	approvalRoute ApprovalRoute
+}
+
+// NewApplication は新しい申請を生成する(初期状態は下書き)
+func NewApplication(id ApplicationID, approverIDs []ApproverID) (*Application, error) {
+	if id == "" {
+		return nil, errors.New("申請IDが空です")
+	}
+	route, err := NewApprovalRoute(approverIDs)
+	if err != nil {
+		return nil, fmt.Errorf("申請の生成に失敗しました: %w", err)
+	}
+	return &Application{
+		id:            id,
+		status:        StatusDraft,
+		approvalRoute: route,
+	}, nil
+}
+
+// Reconstruct はリポジトリからの復元用コンストラクタ
+func Reconstruct(id ApplicationID, status Status, route ApprovalRoute) (*Application, error) {
+	if id == "" {
+		return nil, errors.New("申請IDが空です")
+	}
+	if len(route) == 0 {
+		return nil, errors.New("承認ルートが空です")
+	}
+	return &Application{
+		id:            id,
+		status:        status,
+		approvalRoute: route,
+	}, nil
+}
+
+// ID は申請IDを返す
+func (a *Application) ID() ApplicationID { return a.id }
+
+// Status は現在の状態を返す
+func (a *Application) Status() Status { return a.status }
+
+// ApprovalRoute は承認ルートのコピーを返す
+func (a *Application) ApprovalRoute() ApprovalRoute {
+	copied := make(ApprovalRoute, len(a.approvalRoute))
+	copy(copied, a.approvalRoute)
+	return copied
+}
+
+// transitionTo は状態遷移を行う内部メソッド
+func (a *Application) transitionTo(next Status) error {
+	if !a.status.CanTransitionTo(next) {
+		return fmt.Errorf(
+			"状態遷移が許可されていません: %q → %q",
+			a.status, next,
+		)
+	}
+	a.status = next
+	return nil
+}
+
+// Submit は申請を提出する(下書き → 申請中、または差戻し → 申請中)
+func (a *Application) Submit() error {
+	return a.transitionTo(StatusSubmitted)
+}
+
+// Approve は指定の承認者が現在のステップを承認する。
+// 順番を飛ばした承認はエラーにする。
+// すべての段が承認されたとき、申請を承認済みに遷移させる。
+func (a *Application) Approve(approverID ApproverID, at time.Time) error {
+	if a.status != StatusSubmitted {
+		return fmt.Errorf("申請中の状態でなければ承認できません(現在: %q)", a.status)
+	}
+
+	idx := a.approvalRoute.currentStepIndex()
+	if idx == -1 {
+		return errors.New("すでにすべての承認が完了しています")
+	}
+
+	step := a.approvalRoute[idx]
+	if step.ApproverID != approverID {
+		return fmt.Errorf(
+			"順番が異なります: 現在の承認者は %q ですが、%q が承認しようとしています",
+			step.ApproverID, approverID,
+		)
+	}
+
+	t := at
+	step.ApprovedAt = &t
+
+	if a.approvalRoute.IsFullyApproved() {
+		if err := a.transitionTo(StatusApproved); err != nil {
+			return fmt.Errorf("承認済みへの遷移に失敗しました: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Reject は申請を差戻す(申請中 → 差戻し)。
+// 差戻し時はすべての承認ステップをリセットする。
+func (a *Application) Reject() error {
+	if err := a.transitionTo(StatusRejected); err != nil {
+		return err
+	}
+	a.resetApprovalSteps()
+	return nil
+}
+
+// resetApprovalSteps はすべての承認ステップの承認情報をリセットする
+func (a *Application) resetApprovalSteps() {
+	for _, step := range a.approvalRoute {
+		step.ApprovedAt = nil
+	}
+}
+```

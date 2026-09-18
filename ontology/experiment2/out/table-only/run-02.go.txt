@@ -1,0 +1,130 @@
+```go
+// domain/application/application.go
+package application
+
+import (
+	"fmt"
+	"time"
+)
+
+// ApplicationID は申請IDを表す値オブジェクト
+type ApplicationID string
+
+// Application は申請を表すエンティティ
+type Application struct {
+	id        ApplicationID
+	status    Status
+	title     string
+	content   string
+	createdAt time.Time
+	updatedAt time.Time
+}
+
+// New は新しい申請を生成する。初期状態は下書き(draft)
+func New(id ApplicationID, title, content string) *Application {
+	now := time.Now()
+	return &Application{
+		id:        id,
+		status:    StatusDraft,
+		title:     title,
+		content:   content,
+		createdAt: now,
+		updatedAt: now,
+	}
+}
+
+// Reconstruct はDBなどの永続化層から申請を復元する
+func Reconstruct(id ApplicationID, status, title, content string, createdAt, updatedAt time.Time) (*Application, error) {
+	s, err := NewStatus(status)
+	if err != nil {
+		return nil, fmt.Errorf("申請の復元に失敗しました: %w", err)
+	}
+	return &Application{
+		id:        id,
+		status:    s,
+		title:     title,
+		content:   content,
+		createdAt: createdAt,
+		updatedAt: updatedAt,
+	}, nil
+}
+
+// ID は申請IDを返す
+func (a *Application) ID() ApplicationID {
+	return a.id
+}
+
+// Status は現在の状態を返す
+func (a *Application) Status() Status {
+	return a.status
+}
+
+// Title はタイトルを返す
+func (a *Application) Title() string {
+	return a.title
+}
+
+// Content は内容を返す
+func (a *Application) Content() string {
+	return a.content
+}
+
+// CreatedAt は作成日時を返す
+func (a *Application) CreatedAt() time.Time {
+	return a.createdAt
+}
+
+// UpdatedAt は更新日時を返す
+func (a *Application) UpdatedAt() time.Time {
+	return a.updatedAt
+}
+
+// transition は状態遷移の共通処理。遷移表に違反する場合はエラーを返す
+func (a *Application) transition(next Status) error {
+	if !a.status.CanTransitionTo(next) {
+		return fmt.Errorf(
+			"状態遷移が許可されていません: %q → %q",
+			a.status, next,
+		)
+	}
+	a.status = next
+	a.updatedAt = time.Now()
+	return nil
+}
+
+// Submit は申請を提出する(draft → submitted, rejected → submitted)
+func (a *Application) Submit() error {
+	if err := a.transition(StatusSubmitted); err != nil {
+		return fmt.Errorf("提出に失敗しました: %w", err)
+	}
+	return nil
+}
+
+// Approve は申請を承認する(submitted → approved)
+func (a *Application) Approve() error {
+	if err := a.transition(StatusApproved); err != nil {
+		return fmt.Errorf("承認に失敗しました: %w", err)
+	}
+	return nil
+}
+
+// Reject は申請を差し戻す(submitted → rejected)
+func (a *Application) Reject() error {
+	if err := a.transition(StatusRejected); err != nil {
+		return fmt.Errorf("差戻しに失敗しました: %w", err)
+	}
+	return nil
+}
+
+// Resubmit は差し戻された申請を再提出する(rejected → submitted)
+// Submit と遷移先は同じだが、呼び出し元の意図を明確にするためメソッドを分ける
+func (a *Application) Resubmit() error {
+	if a.status != StatusRejected {
+		return fmt.Errorf("再提出は差戻し状態の申請にのみ行えます: 現在の状態=%q", a.status)
+	}
+	if err := a.transition(StatusSubmitted); err != nil {
+		return fmt.Errorf("再提出に失敗しました: %w", err)
+	}
+	return nil
+}
+```

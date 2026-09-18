@@ -1,0 +1,175 @@
+```go
+// domain/application/application.go
+package application
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ApproverID は承認者を識別する型
+type ApproverID string
+
+// ApprovalStep は承認ルートの1段を表す
+type ApprovalStep struct {
+	ApproverID ApproverID
+	ApprovedAt *time.Time
+}
+
+// IsApproved はこの段が承認済みかどうかを返す
+func (s ApprovalStep) IsApproved() bool {
+	return s.ApprovedAt != nil
+}
+
+// ApplicationID は申請を識別する型
+type ApplicationID string
+
+// Application は申請を表すエンティティ
+type Application struct {
+	id            ApplicationID
+	status        Status
+	approvalSteps []ApprovalStep // 承認ルート(先頭から順に承認される)
+	createdAt     time.Time
+	updatedAt     time.Time
+}
+
+// NewApplication は新しい申請を生成する(初期状態は下書き)
+func NewApplication(id ApplicationID, approverIDs []ApproverID) (*Application, error) {
+	if len(approverIDs) == 0 {
+		return nil, errors.New("承認ルートに承認者が1人以上必要です")
+	}
+	steps := make([]ApprovalStep, len(approverIDs))
+	for i, aid := range approverIDs {
+		steps[i] = ApprovalStep{ApproverID: aid}
+	}
+	now := time.Now()
+	return &Application{
+		id:            id,
+		status:        StatusDraft,
+		approvalSteps: steps,
+		createdAt:     now,
+		updatedAt:     now,
+	}, nil
+}
+
+// Reconstruct はリポジトリからの復元用コンストラクタ
+func Reconstruct(
+	id ApplicationID,
+	status Status,
+	steps []ApprovalStep,
+	createdAt time.Time,
+	updatedAt time.Time,
+) (*Application, error) {
+	if len(steps) == 0 {
+		return nil, errors.New("承認ルートに承認者が1人以上必要です")
+	}
+	return &Application{
+		id:            id,
+		status:        status,
+		approvalSteps: steps,
+		createdAt:     createdAt,
+		updatedAt:     updatedAt,
+	}, nil
+}
+
+// ID は申請IDを返す
+func (a *Application) ID() ApplicationID { return a.id }
+
+// Status は現在の状態を返す
+func (a *Application) Status() Status { return a.status }
+
+// ApprovalSteps は承認ルートのコピーを返す
+func (a *Application) ApprovalSteps() []ApprovalStep {
+	copied := make([]ApprovalStep, len(a.approvalSteps))
+	copy(copied, a.approvalSteps)
+	return copied
+}
+
+// CreatedAt は作成日時を返す
+func (a *Application) CreatedAt() time.Time { return a.createdAt }
+
+// UpdatedAt は最終更新日時を返す
+func (a *Application) UpdatedAt() time.Time { return a.updatedAt }
+
+// Submit は申請を提出する(下書き→申請中、差戻し→申請中)
+func (a *Application) Submit() error {
+	if !a.status.CanTransitionTo(StatusSubmitted) {
+		return fmt.Errorf("状態 %q から申請中への遷移はできません", a.status)
+	}
+	// 差戻しからの再提出の場合、未承認の段をリセットする
+	if a.status == StatusRejected {
+		a.resetPendingSteps()
+	}
+	a.status = StatusSubmitted
+	a.updatedAt = time.Now()
+	return nil
+}
+
+// Approve は指定した承認者が現在の段を承認する
+func (a *Application) Approve(approverID ApproverID) error {
+	if a.status != StatusSubmitted {
+		return fmt.Errorf("申請中でなければ承認できません(現在の状態: %q)", a.status)
+	}
+
+	step, idx, err := a.currentPendingStep()
+	if err != nil {
+		return err
+	}
+	if step.ApproverID != approverID {
+		return fmt.Errorf("現在の承認者は %q です(%q は承認できません)", step.ApproverID, approverID)
+	}
+
+	now := time.Now()
+	a.approvalSteps[idx].ApprovedAt = &now
+
+	// すべての段が承認されたら承認済みへ遷移
+	if a.allStepsApproved() {
+		if !a.status.CanTransitionTo(StatusApproved) {
+			return fmt.Errorf("状態 %q から承認済みへの遷移はできません", a.status)
+		}
+		a.status = StatusApproved
+	}
+
+	a.updatedAt = now
+	return nil
+}
+
+// Reject は申請を差戻しにする
+func (a *Application) Reject() error {
+	if !a.status.CanTransitionTo(StatusRejected) {
+		return fmt.Errorf("状態 %q から差戻しへの遷移はできません", a.status)
+	}
+	a.status = StatusRejected
+	a.updatedAt = time.Now()
+	return nil
+}
+
+// currentPendingStep は最初の未承認段とそのインデックスを返す
+func (a *Application) currentPendingStep() (*ApprovalStep, int, error) {
+	for i := range a.approvalSteps {
+		if !a.approvalSteps[i].IsApproved() {
+			return &a.approvalSteps[i], i, nil
+		}
+	}
+	return nil, -1, errors.New("すべての承認段がすでに承認済みです")
+}
+
+// allStepsApproved はすべての承認段が承認済みかどうかを返す
+func (a *Application) allStepsApproved() bool {
+	for _, step := range a.approvalSteps {
+		if !step.IsApproved() {
+			return false
+		}
+	}
+	return true
+}
+
+// resetPendingSteps は未承認の段の承認情報をリセットする
+// 差戻しからの再提出時に、途中まで承認されていた場合に先頭から承認し直す
+func (a *Application) resetPendingSteps() {
+	for i := range a.approvalSteps {
+		a.approvalSteps[i].ApprovedAt = nil
+	}
+}
+```
