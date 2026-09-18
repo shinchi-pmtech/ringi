@@ -26,6 +26,7 @@ Qiita 連載のコード置き場です。設計判断の背景や解説は記�
 | 回 | 記事 | コード |
 | --- | --- | --- |
 | 第1回 | [差戻された申請は、もう一度出せますか？　AIの答えは「出せない」](https://qiita.com/shinchi-pmtech/items/fea33ad995978944a432) | [ai-01](https://github.com/shinchi-pmtech/ringi/tree/ai-01) |
+| 第2回 | [差戻したら、それまでの承認はどうなりますか？　AIの答えは4対1で割れました](https://qiita.com/shinchi-pmtech/items/e22b7b7a900161ff42a2) | [ai-02](https://github.com/shinchi-pmtech/ringi/tree/ai-02) |
 
 ## 動かし方
 
@@ -68,8 +69,7 @@ go test ./...
 │   └── persistence          # リポジトリの実装(SQLite / インメモリ)
 ├── presentation
 │   └── handler              # HTTPハンドラ
-└── ontology
-    └── experiment           # 連載2の実験コード(AIに語彙を渡す試み)
+└── ontology                 # 連載2の実験コード(AIに語彙を渡す試み。回ごとにディレクトリを追加)
 ```
 
 依存の向きはすべて `domain` に向かいます。`domain` は標準ライブラリ以外の何にも依存しません。
